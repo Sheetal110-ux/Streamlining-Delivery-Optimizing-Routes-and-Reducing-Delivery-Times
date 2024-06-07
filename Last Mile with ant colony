@@ -1,0 +1,121 @@
+import pandas as pd
+import numpy as np
+from sklearn.cluster import KMeans
+from scipy.spatial.distance import cdist
+import random
+from sklearn.impute import SimpleImputer
+
+# Load restaurant data
+restaurants_df = pd.read_csv('outrest.csv')
+
+# Load customer data
+customers_df = pd.read_csv('cust_time2.csv')
+
+# Impute missing values in customer data with mean
+imputer = SimpleImputer(strategy='mean')
+customers_df[['Latitude', 'Longitude']] = imputer.fit_transform(customers_df[['Latitude', 'Longitude']])
+
+# Delivery boys' locations
+delivery_boys_locations = [(12.95404312, 77.56886512), 
+                           (12.91804385, 77.63768893), 
+                           (12.91192952, 77.63801917)]
+
+# Perform K-means clustering on customer locations
+kmeans = KMeans(n_clusters=len(delivery_boys_locations))
+customer_locations = customers_df[['Latitude', 'Longitude']]
+kmeans.fit(customer_locations)
+customers_df['cluster'] = kmeans.labels_
+
+# Assign each cluster to the closest delivery boy based on initial location
+cluster_centers = kmeans.cluster_centers_
+distances = cdist(delivery_boys_locations, cluster_centers, metric='euclidean')
+delivery_boy_assignments = distances.argmin(axis=0)
+cluster_to_delivery_boy = {i: delivery_boy_assignments[i] for i in range(len(delivery_boys_locations))}
+
+# Helper function to calculate the distance between two points
+def calculate_distance(point1, point2):
+    return np.sqrt((point1[0] - point2[0]) * 2 + (point1[1] - point2[1]) * 2)
+
+# Helper function to calculate the total distance of a route
+def total_distance(route, locations):
+    distance = 0
+    for i in range(len(route) - 1):
+        distance += calculate_distance(locations[route[i]], locations[route[i + 1]])
+    distance += calculate_distance(locations[route[-1]], locations[route[0]])  # Return to depot
+    return distance
+
+# Function to initialize pheromone levels
+def initialize_pheromone_levels(n):
+    return np.ones((n, n))
+
+# Function to calculate probabilities
+def calculate_probabilities(pheromone_levels, distance_matrix, visited, alpha, beta):
+    n = len(pheromone_levels)
+    probabilities = np.zeros(n)
+    current_location = visited[-1]
+    for i in range(n):
+        if i not in visited:
+            probabilities[i] = (pheromone_levels[current_location, i] * alpha) * ((1.0 / distance_matrix[current_location, i]) * beta)
+    probabilities /= probabilities.sum()
+    return probabilities
+
+# Function to update pheromone levels
+def update_pheromone_levels(pheromone_levels, all_tours, all_tour_lengths, evaporation_rate, pheromone_influence):
+    pheromone_levels *= (1 - evaporation_rate)
+    for tour, tour_length in zip(all_tours, all_tour_lengths):
+        for i in range(len(tour) - 1):
+            pheromone_levels[tour[i], tour[i + 1]] += pheromone_influence / tour_length
+            pheromone_levels[tour[i + 1], tour[i]] += pheromone_influence / tour_length
+
+# Perform Ant Colony Optimization (ACO) for each cluster
+for cluster_id, group in customers_df.groupby('cluster'):
+    # Get the delivery boy assigned to this cluster
+    assigned_delivery_boy = cluster_to_delivery_boy[cluster_id]
+    
+    # Extract customer locations in this cluster
+    cluster_customers = group[['Latitude', 'Longitude']].values
+    
+    # Calculate the distance matrix for the cluster
+    distance_matrix = cdist(cluster_customers, cluster_customers, metric='euclidean')
+    
+    # Ant Colony Optimization parameters
+    num_ants = 10
+    num_iterations = 100
+    alpha = 1.0  # pheromone importance
+    beta = 5.0  # distance importance
+    evaporation_rate = 0.5
+    pheromone_influence = 100.0
+    
+    # Initialize pheromone levels
+    pheromone_levels = initialize_pheromone_levels(len(cluster_customers))
+    
+    best_tour = None
+    best_tour_length = float('inf')
+    
+    for iteration in range(num_iterations):
+        all_tours = []
+        all_tour_lengths = []
+        
+        for ant in range(num_ants):
+            tour = [random.randint(0, len(cluster_customers) - 1)]
+            while len(tour) < len(cluster_customers):
+                probabilities = calculate_probabilities(pheromone_levels, distance_matrix, tour, alpha, beta)
+                next_location = np.random.choice(range(len(cluster_customers)), p=probabilities)
+                tour.append(next_location)
+            tour_length = total_distance(tour, cluster_customers)
+            
+            all_tours.append(tour)
+            all_tour_lengths.append(tour_length)
+            
+            if tour_length < best_tour_length:
+                best_tour = tour
+                best_tour_length = tour_length
+        
+        # Update pheromone levels
+        update_pheromone_levels(pheromone_levels, all_tours, all_tour_lengths, evaporation_rate, pheromone_influence)
+    
+    # Print the optimized route for the cluster
+    print(f"Cluster {cluster_id}, Assigned Delivery Boy: {assigned_delivery_boy}")
+    print("Optimized Route:")
+    print(" -> ".join(map(str, best_tour)))
+    print(f"Total Distance: {best_tour_length}")
