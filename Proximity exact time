@@ -1,0 +1,65 @@
+import pandas as pd
+from sklearn.cluster import KMeans
+from geopy.distance import geodesic
+
+# Load customer data
+customer_data = pd.read_csv('cust_time2.csv')
+
+# Identify numeric columns
+numeric_columns = customer_data.select_dtypes(include=['float64', 'int64']).columns
+
+# Fill missing values with mean for numeric columns
+customer_data[numeric_columns] = customer_data[numeric_columns].fillna(customer_data[numeric_columns].mean())
+
+# Extract customer coordinates and time
+customer_coordinates = customer_data[['Latitude', 'Longitude']].values
+customer_time = pd.to_datetime(customer_data['time_x'])
+
+# Load restaurant data
+restaurant_data = pd.read_csv('outrest.csv')
+restaurant_time = pd.to_datetime(restaurant_data['time_y'].iloc[0])
+
+# Extract restaurant locations
+restaurant_locations = restaurant_data[['Latitude', 'Longitude']].values
+
+# Delivery boys' locations
+delivery_boys_locations = [(12.95404312, 77.56886512), 
+                            (12.91804385, 77.63768893), 
+                            (12.91192952, 77.63801917)]
+
+# Define average speed of delivery boy in kilometers per hour
+average_speed_of_delivery_boy = 45  # Example value (30 km/h)
+
+# Calculate distance between points
+def calculate_distance(coord1, coord2):
+    return geodesic(coord1, coord2).kilometers
+
+# Cluster customers
+kmeans = KMeans(n_clusters=len(delivery_boys_locations), random_state=0).fit(customer_coordinates)
+customer_data['cluster'] = kmeans.labels_
+
+# Assign each delivery boy to a different restaurant location
+delivery_boy_assignments = {i: i for i in range(len(delivery_boys_locations))}
+
+# Assign each order to a delivery boy based on the cluster of the customer who placed the order
+customer_data['assigned_delivery_boy'] = customer_data['cluster'].map(lambda x: delivery_boy_assignments[x])
+
+# Print delivery boy assignments along with assigned clusters
+for i, (assigned_delivery_boy, cluster) in enumerate(zip(delivery_boy_assignments.values(), kmeans.labels_)):
+    print(f"Delivery Boy {i+1} is assigned to Restaurant Location: Latitude {restaurant_locations[i][0]}, Longitude {restaurant_locations[i][1]}, Cluster: {cluster}")
+
+# Calculate distance and time for each delivery
+for _, order in customer_data.iterrows():
+    delivery_boy_location = delivery_boys_locations[order['assigned_delivery_boy']]
+    distance_to_customer = calculate_distance(delivery_boy_location, (order['Latitude'], order['Longitude']))
+    time_to_customer = distance_to_customer / average_speed_of_delivery_boy * 60  # Convert hours to minutes
+    
+    # Calculate time for delivery boy to reach customer
+    delivery_boy_time_to_customer = time_to_customer
+    
+    # If order time is after restaurant's time, delivery boy needs to go to restaurant first
+    order_time = pd.to_datetime(order['time_x'])
+    if order_time > restaurant_time:
+        delivery_boy_time_to_customer += calculate_distance(delivery_boy_location, restaurant_locations[order['assigned_delivery_boy']]) / average_speed_of_delivery_boy * 60  # Convert hours to minutes
+    
+    print(f"Delivery Boy {order['assigned_delivery_boy']+1} traveled {distance_to_customer:.2f} kilometers to reach customer (Latitude {order['Latitude']}, Longitude {order['Longitude']}) and took {delivery_boy_time_to_customer:.2f} minutes.")
