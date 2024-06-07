@@ -1,0 +1,104 @@
+import random
+import numpy as np
+import pandas as pd
+
+
+import matplotlib.pyplot as plt
+from haversine import haversine
+import copy
+
+def calculate_total_distance(path):
+    total_distance = 0
+    for i in range(len(path) - 1):
+        total_distance += haversine(path[i], path[i + 1])
+    return total_distance
+
+def generate_random_path(coordinates):
+    return random.sample(coordinates, len(coordinates))
+
+def aca(population_size, max_generations, elite_ratio, mutation_rate, coordinates):
+    population = [generate_random_path(coordinates) for _ in range(population_size)]
+
+    for generation in range(max_generations):
+        fitness_scores = [1 / calculate_total_distance(path) for path in population]
+
+        elite_count = int(population_size * elite_ratio)
+        elite_indices = np.argsort(fitness_scores)[-elite_count:]
+        elite_paths = [population[i] for i in elite_indices]
+
+        new_population = copy.deepcopy(elite_paths)
+
+        while len(new_population) < population_size:
+            if random.random() < mutation_rate:
+                path = random.choice(elite_paths)
+                mutated_path = copy.deepcopy(path)
+                idx1, idx2 = random.sample(range(len(path)), 2)
+                mutated_path[idx1], mutated_path[idx2] = mutated_path[idx2], mutated_path[idx1]
+                new_population.append(mutated_path)
+            else:
+                parent1, parent2 = random.sample(elite_paths, 2)
+                crossover_point = random.randint(1, len(parent1) - 1)
+
+                child_path = parent1[:crossover_point] + parent2[crossover_point:]
+                child_path = list(set(child_path))  # remove duplicates
+
+                if len(child_path) < len(coordinates):  # if child path is too short, add missing points
+                    missing_points = [point for point in coordinates if point not in child_path]
+                    child_path.extend(random.sample(missing_points, len(coordinates) - len(child_path)))
+
+                new_population.append(child_path)
+
+        population = new_population
+
+    best_path = min(population, key=calculate_total_distance)
+    return best_path, calculate_total_distance(best_path)
+
+def plot_path(starting_point, path):
+    latitudes = [starting_point[0]] + [point[0] for point in path]
+    longitudes = [starting_point[1]] + [point[1] for point in path]
+
+    plt.plot(longitudes, latitudes, '-o', color='blue')
+    plt.plot(longitudes[0], latitudes[0], 'o', color='green', label='Starting Point')
+
+    # Plot arrows to indicate direction of travel
+    for i in range(len(latitudes) - 1):
+        plt.arrow(longitudes[i], latitudes[i], longitudes[i+1] - longitudes[i], latitudes[i+1] - latitudes[i],
+                  length_includes_head=True, head_width=2, color='black')
+
+    plt.xlabel('Longitude')
+    plt.ylabel('Latitude')
+    plt.title('Shortest Path')
+    plt.legend()
+    plt.show()
+
+# Read coordinates from CSV or any other source
+# data = pd.read_csv('output1 (1).csv')
+# coordinates = [(row['latitude'], row['longitude']) for index, row in data.iterrows()]
+
+# For demonstration, let's generate random coordinates
+coordinates = [(np.random.uniform(-90, 90), np.random.uniform(-180, 180)) for _ in range(20)]
+
+population_size = 50
+max_generations = 1000
+elite_ratio = 0.2
+mutation_rate = 0.2
+
+best_path, shortest_distance = aca(population_size, max_generations, elite_ratio, mutation_rate, coordinates)
+starting_point = coordinates[0]
+total_distance_covered = calculate_total_distance(best_path)
+print("Total Distance Covered:", total_distance_covered)
+# Obtain benchmark solution (optimal or best-known)
+benchmark_distance = 80000  # Placeholder value, replace with actual benchmark distance if available
+
+# Calculate total distance obtained by ACA
+aca_distance = calculate_total_distance(best_path)
+
+# Calculate the percentage deviation from the benchmark
+accuracy = (benchmark_distance - aca_distance) / benchmark_distance * 100
+
+print("Benchmark Distance:", benchmark_distance)
+print("ACA Distance:", aca_distance)
+print("Accuracy (Percentage Deviation):", accuracy, "%")
+
+
+plot_path(starting_point, best_path)
