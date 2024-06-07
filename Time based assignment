@@ -1,0 +1,69 @@
+import pandas as pd
+import numpy as np
+from scipy.spatial import distance
+
+# Load restaurant data
+restaurant_data = pd.read_csv("outrest.csv")
+
+# Load customer data
+customer_data = pd.read_csv("clustered_customer_data.csv")
+
+# Delivery boys locations
+delivery_boys_locations = [(12.95404312, 77.56886512), (12.91804385, 77.63768893), (12.91192952, 77.63801917)]
+
+# Assign each delivery boy to a random restaurant
+np.random.seed(0)  # for reproducibility
+restaurant_data['assigned_delivery_boy'] = np.random.choice(range(len(delivery_boys_locations)), size=len(restaurant_data))
+
+# Calculate distance between each delivery boy and each restaurant
+distances = distance.cdist(np.array(restaurant_data[['Latitude', 'Longitude']]), np.array(delivery_boys_locations))
+
+# Find the nearest restaurant for each delivery boy
+nearest_restaurants = np.argmin(distances, axis=1)  # Changed axis to 1
+
+# Update restaurant data with assigned delivery boys and nearest restaurants
+restaurant_data['nearest_restaurant_id'] = nearest_restaurants
+
+# Assign delivery boys to customer clusters based on time
+for cluster in customer_data['time_cluster'].unique():
+    customers_in_cluster = customer_data[customer_data['time_cluster'] == cluster]
+    
+    for index, customer in customers_in_cluster.iterrows():
+        customer_location = (customer['Latitude'], customer['Longitude'])
+        # Find the nearest restaurant to the customer
+        distances_to_restaurants = distance.cdist(np.array([customer_location]), np.array(restaurant_data[['Latitude', 'Longitude']]))
+        nearest_restaurant_idx = np.argmin(distances_to_restaurants)
+        nearest_delivery_boy_idx = restaurant_data.loc[nearest_restaurant_idx, 'assigned_delivery_boy']
+        
+        # Check if 'time_x' is a valid datetime value
+        if pd.notnull(customer['time_x']):
+            # Convert 'time_x' to datetime
+            customer_cluster_time = pd.to_datetime(customer['time_x'], errors='coerce')
+            
+            # Extract hour and minute components
+            customer_cluster_hour = customer_cluster_time.hour
+            customer_cluster_minute = customer_cluster_time.minute
+            
+            # Check if 'time_y' is a valid datetime value
+            if pd.notnull(restaurant_data.loc[nearest_restaurant_idx, 'time_y']):
+                # Convert 'time_y' to datetime
+                restaurant_available_time = pd.to_datetime(restaurant_data.loc[nearest_restaurant_idx, 'time_y'], errors='coerce')
+                
+                # Extract hour and minute components
+                restaurant_available_hour = restaurant_available_time.hour
+                restaurant_available_minute = restaurant_available_time.minute
+                
+                # Check if both times are valid
+                if not pd.isnull(customer_cluster_hour) and not pd.isnull(restaurant_available_hour):
+                    # Calculate time difference between customer cluster time and restaurant available time
+                    time_difference = (restaurant_available_hour - customer_cluster_hour) * 60 + (restaurant_available_minute - customer_cluster_minute)
+                    
+                    # Assign the nearest delivery boy to the customer
+                    customer_data.loc[index, 'assigned_delivery_boy'] = nearest_delivery_boy_idx
+                    # Add columns for assigned restaurant and its time
+                    customer_data.loc[index, 'assigned_restaurant'] = restaurant_data.loc[nearest_restaurant_idx, 'Unnamed: 0']
+                    customer_data.loc[index, 'restaurant_time'] = restaurant_data.loc[nearest_restaurant_idx, 'time_y']
+                    customer_data.loc[index, 'time_difference'] = time_difference
+
+# Save the updated customer data to a CSV file
+customer_data.to_csv("updated_customer_data_with_time_constraints.csv", index=False)
