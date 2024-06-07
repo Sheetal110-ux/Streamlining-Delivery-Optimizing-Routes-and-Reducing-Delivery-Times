@@ -1,0 +1,93 @@
+#Certainly! The TSP (Traveling Salesman Problem) using an Insertion Algorithm is a heuristic approach that starts with a 
+#partial tour and iteratively inserts unvisited cities into the 
+#tour at the most suitable positions to minimize the total distance
+
+
+import pandas as pd
+import numpy as np
+import math
+import matplotlib.pyplot as plt
+
+# Load latitude and longitude data from a CSV file
+df = pd.read_csv('out_2.csv')
+ 
+# Convert latitude and longitude columns to NumPy arrays
+latitude = df['latitude'].values
+longitude = df['longitude'].values
+
+# Function to calculate Haversine distance between two coordinates
+def haversine(lat1, lon1, lat2, lon2):
+    # Radius of the Earth in kilometers
+    R = 6371.0
+
+    # Convert latitude and longitude from degrees to radians
+    lat1 = math.radians(lat1)
+    lon1 = math.radians(lon1)
+    lat2 = math.radians(lat2)
+    lon2 = math.radians(lon2)
+
+    # Haversine formula
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat / 2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    distance = R * c
+
+    return distance
+
+# Calculate the distance matrix using Haversine distance
+n = len(latitude)
+distance_matrix = np.zeros((n, n))
+
+for i in range(n):
+    for j in range(n):
+        distance_matrix[i][j] = haversine(latitude[i], longitude[i], latitude[j], longitude[j])
+
+# Initialize the tour with the first two cities
+tour = [0, 1]
+unvisited_cities = list(range(2, n))  # Cities 0 and 1 are already in the tour
+
+# Insertion Algorithm
+while unvisited_cities:
+    min_insertion_cost = float('inf')
+    best_insertion_position = None
+    new_city = None
+
+    for city in unvisited_cities:
+        for i in range(1, len(tour)):
+            current_cost = (
+                distance_matrix[tour[i - 1]][city] + distance_matrix[city][tour[i]] - distance_matrix[tour[i - 1]][tour[i]]
+            )
+            if current_cost < min_insertion_cost:
+                min_insertion_cost = current_cost
+                best_insertion_position = i
+                new_city = city
+
+    # Insert the new city at the best position
+    tour.insert(best_insertion_position, new_city)
+    unvisited_cities.remove(new_city)
+
+# Complete the tour by returning to the starting city
+tour.append(tour[0])
+
+# Calculate the total distance of the tour
+total_distance = sum(distance_matrix[tour[i]][tour[i + 1]] for i in range(n))
+
+# Visualize the traversal path
+plt.figure(figsize=(10, 6))
+plt.scatter(longitude, latitude, c='red', marker='o', label='Cities')
+optimal_path_coordinates = [(longitude[i], latitude[i]) for i in tour]
+path_lon, path_lat = zip(*optimal_path_coordinates)
+plt.plot(path_lon, path_lat, linestyle='-', linewidth=2, markersize=5, label='Traversal Path', color='blue')
+starting_point_lon, starting_point_lat = longitude[tour[0]], latitude[tour[0]]
+plt.scatter(starting_point_lon, starting_point_lat, c='green', marker='x', s=100, label='Starting Point')
+plt.xlabel('Longitude')
+plt.ylabel('Latitude')
+plt.legend()
+plt.title('Traversal Path for TSP with Starting Point')
+plt.grid(True)
+plt.show()
+
+# Print the tour and total distance
+print("Optimal Tour (City Indices):", tour)
+print("Total Distance (in kilometers):", total_distance)
