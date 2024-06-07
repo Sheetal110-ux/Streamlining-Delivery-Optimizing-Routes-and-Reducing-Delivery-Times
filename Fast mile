@@ -1,0 +1,65 @@
+# Import required libraries
+import pandas as pd
+import itertools
+
+# Function to calculate distance between two points (using Euclidean distance for simplicity)
+def calculate_distance(location1, location2):
+    x1, y1 = location1
+    x2, y2 = location2
+    return ((x2 - x1) * 2 + (y2 - y1) * 2) ** 0.5
+
+# Function to generate all possible permutations of delivery locations
+def generate_permutations(locations):
+    return list(itertools.permutations(locations))
+
+# Function to calculate total distance for a given route
+def calculate_total_distance(route):
+    total_distance = 0
+    for i in range(len(route) - 1):
+        total_distance += calculate_distance(route[i], route[i + 1])
+    return total_distance
+
+# Function to optimize the first mile of delivery routes using a greedy approach
+def optimize_first_mile(restaurants, customers):
+    min_distance = float('inf')
+    optimal_route = None
+    for restaurant in restaurants:
+        for customer in customers:
+            route_distance = calculate_distance(restaurant, customer)
+            if route_distance < min_distance:
+                min_distance = route_distance
+                optimal_route = (restaurant, customer)
+    return optimal_route, min_distance
+
+# Read data from CSV files
+def read_csv_files(restaurant_file_path, customer_file_path):
+    restaurants_df = pd.read_csv(restaurant_file_path)
+    customers_df = pd.read_csv(customer_file_path)
+    return restaurants_df, customers_df
+
+# Sample data file paths
+restaurant_file_path = 'outrest.csv'
+customer_file_path = 'cust_time2.csv'
+
+# Read data from CSV files
+restaurants_df, customers_df = read_csv_files(restaurant_file_path, customer_file_path)
+
+# Extract restaurant and customer locations
+restaurant_locations = restaurants_df[['Latitude', 'Longitude']].values.tolist()
+customer_locations = customers_df[['Latitude', 'Longitude']].values.tolist()
+
+# Optimize the first mile of delivery routes
+optimized_first_mile_routes = []
+total_first_mile_distance = 0
+for i in range(len(restaurant_locations)):
+    restaurant_location = restaurant_locations[i]
+    customers = customer_locations  # All customers for this restaurant
+    optimal_route, min_distance = optimize_first_mile([restaurant_location], customers)
+    optimized_first_mile_routes.append(optimal_route)
+    total_first_mile_distance += min_distance
+
+# Output optimized first mile routes and total distance
+print("Optimized First Mile Routes:")
+for i, route in enumerate(optimized_first_mile_routes):
+    print(f"Restaurant {i+1} to Customer: {route}")
+print(f"Total First Mile Distance: {total_first_mile_distance}")
