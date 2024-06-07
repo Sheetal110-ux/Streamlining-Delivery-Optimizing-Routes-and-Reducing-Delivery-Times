@@ -1,0 +1,70 @@
+import pandas as pd
+import numpy as np
+
+# Step 1: Read Data
+def read_data(customer_file, restaurant_file):
+    customers_df = pd.read_csv('cust_time2.csv')
+    restaurants_df = pd.read_csv('outrest.csv')
+    delivery_boys_locations = [(12.95404312, 77.56886512), 
+                               (12.91804385, 77.63768893), 
+                               (12.91192952, 77.63801917)]
+    return customers_df, restaurants_df, delivery_boys_locations
+
+# Step 2: Define Classes
+class Delivery:
+    def _init_(self, customer_id, location):
+        self.customer_id = customer_id
+        self.location = location
+
+class Vehicle:
+    def _init_(self, location, capacity):
+        self.location = location
+        self.capacity = capacity
+        self.deliveries = []
+
+class Route:
+    def _init_(self, vehicle):
+        self.vehicle = vehicle
+        self.deliveries = []
+
+# Step 3: Calculate Distances
+def calculate_distance(location1, location2):
+    return np.sqrt((location2[0] - location1[0])*2 + (location2[1] - location1[1])*2)
+
+# Step 4: Routing Algorithm
+def last_mile_routing(customers, restaurants, delivery_boys):
+    vehicles = [Vehicle(location, capacity=10) for location in delivery_boys]
+    routes = [Route(vehicle) for vehicle in vehicles]
+
+    for index, customer in customers.iterrows():
+        nearest_vehicle = min(vehicles, key=lambda v: calculate_distance(v.location, (customer['Latitude'], customer['Longitude'])))
+        nearest_vehicle.deliveries.append(Delivery(index, (customer['Latitude'], customer['Longitude'])))
+
+
+
+
+    return routes
+
+# Step 5: Output Routes
+def print_routes(routes):
+    for route in routes:
+        print(f"Vehicle at location {route.vehicle.location}:")
+        if route.vehicle.deliveries:
+            print("  Deliveries:")
+            for delivery in route.vehicle.deliveries:
+                print(f"    Deliver to Customer {delivery.customer_id} at location {delivery.location}")
+        else:
+            print("  No deliveries assigned")
+
+# Main Function
+def main():
+    customer_file = 'cust_time2.csv'
+    restaurant_file = 'outrest.csv'
+
+    customers, restaurants, delivery_boys_locations = read_data(customer_file, restaurant_file)
+    routes = last_mile_routing(customers, restaurants, delivery_boys_locations)
+    print_routes(routes)
+
+if _name_ == "_main_":
+    main()
+LAST MILE
